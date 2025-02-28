@@ -69,7 +69,8 @@ class SolutionPool(object):
             df['coefficients'] = [mip.solution_to_coefs(w) for w in df['solution']]
             df['lowerbound'] = lb
             df['prediction_constraint'] = [prediction_constraint] * len(df)
-            self._df = self._df.append(df, sort = False).reset_index(drop = True)
+            self._df = self._df._append(df, sort = False).reset_index(drop = True)
+            # pd.concat([self._df, df]) self._df = self._df.concat(df, sort = False).reset_index(drop = True)
 
 
     def add(self, solution, coefficients, objval, lowerbound, prediction_constraint = None):
@@ -102,7 +103,7 @@ class SolutionPool(object):
                           'prediction_constraint': [prediction_constraint]}
 
         new_df = pd.DataFrame.from_dict(param_dict)
-        self._df = self._df.append(new_df, sort = False).reset_index(drop = True)
+        self._df = self._df._append(new_df, sort = False).reset_index(drop = True)
 
 
     def get_solutions_with_pred(self, x, yhat):
@@ -141,7 +142,7 @@ class SolutionPool(object):
 
 
     def merge(self, pool):
-        self._df.append(pool, sort=False).reset_index(drop=True)
+        self._df._append(pool, sort=False).reset_index(drop=True)
 
 
     def deduplicate(self):

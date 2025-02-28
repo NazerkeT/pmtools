@@ -281,7 +281,7 @@ def generate_stratified_folds(X, strata, n_folds):
     assert n_samples >= 1
     assert X.shape[0] == n_samples
 
-    folds = np.zeros(n_samples, dtype = np.int)
+    folds = np.zeros(n_samples, dtype = int)
     fold_generator = StratifiedKFold(n_splits = n_folds, shuffle = True)
     k = 1
     for train_idx, test_idx in fold_generator.split(X, strata):

@@ -178,7 +178,7 @@ def build_coefficient_pool(info):
 
         # add coefficients
         new_df = loaded['pool_df'][['coefficients', 'lowerbound']].rename(columns = {'lowerbound': 'error_lb'})
-        coef_df = coef_df.append(new_df, sort = False)
+        coef_df = coef_df._append(new_df, sort = False)
 
     # load discrepancy
     file_name = output_dir / get_discrepancy_file_name(info)
@@ -190,13 +190,13 @@ def build_coefficient_pool(info):
         matching_baseline = np.isclose(baseline_coefs, loaded['baseline_coefs']).all()
         if not matching_baseline:
             new_df['agree_lb'] = float('nan')
-        coef_df = coef_df.append(new_df, sort = False)
+        coef_df = coef_df._append(new_df, sort = False)
 
     # load flipped_coefficients
     flipped_coefs = load_coefficients_from_flipped_files(info)
     if len(flipped_coefs) > 0:
         new_df = pd.DataFrame({'coefficients': list(flipped_coefs)})
-        coef_df = coef_df.append(new_df, sort = False)
+        coef_df = coef_df._append(new_df, sort = False)
 
     # load glmnet coefficients
     file_name = output_dir / get_glmnet_file_name(info)
@@ -204,7 +204,7 @@ def build_coefficient_pool(info):
         df = pd.read_csv(file_name)
         df.columns = [n.replace('weight__', '') for n in df.columns.tolist()]
         coefs = list(df[data['variable_names']].values)
-        coef_df = coef_df.append(new_df, sort = False)
+        coef_df = coef_df._append(new_df, sort = False)
 
     if coef_df.shape[0]:
         # select a pair of coefficients with the largest ub
@@ -324,7 +324,7 @@ def train_baseline_classifier(info):
     # get alternative models
     pool_df = pool.get_df()
     pool_df['model_type'] = 'alternative'
-    pool_df = pool_df.append(base_df, sort = False, ignore_index = True).reset_index(drop = True)
+    pool_df = pool_df._append(base_df, sort = False, ignore_index = True).reset_index(drop = True)
 
     # get time
     now = datetime.now()

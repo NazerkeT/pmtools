@@ -933,7 +933,7 @@ def oversample_minority_class(data, **kwargs):
 
     # oversample minority class
     ros = RandomOverSampler(**kwargs)
-    Xs, Ys = ros.fit_sample(X, Y)
+    Xs, Ys = ros.fit_resample(X, Y)
 
     # double check sampling
     assert len(Y) <= len(Ys)
