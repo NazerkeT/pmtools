@@ -6,6 +6,7 @@ from scripts.reporting import *
 from eqm.classifier_helper import get_classifier_from_coefficients
 from eqm.debug import ipsh
 from eqm.data import remove_variable
+import numpy as np
 
 #############################################
 data_name = "compas_arrest_small"
@@ -13,7 +14,7 @@ data_name = "compas_arrest_small"
 fold_id = "K05N01"
 
 # settings just for disparity checks
-epsilon = 0.01
+epsilon = 0.02
 
 #############################################
 
@@ -80,15 +81,15 @@ with open(data_file, "rb") as f:
 unbalanced = load_data_from_csv(data_file.with_suffix(".csv"))
 
 #
-if "compas" in data_name and "_small" in data_name:
-    for feat in ['race_is_causasian',
-                 'race_is_african_american',
-                 'race_is_hispanic',
-                 'race_is_other']:
-        if feat in data['variable_names']:
-            data = remove_variable(data, feat)
-        if feat in unbalanced['variable_names']:
-            unbalanced = remove_variable(unbalanced, feat)
+# if "compas" in data_name and "_small" in data_name:
+#     for feat in ['race_is_causasian',
+#                  'race_is_african_american',
+#                  'race_is_hispanic',
+#                  'race_is_other']:
+#         if feat in data['variable_names']:
+#             data = remove_variable(data, feat)
+#         if feat in unbalanced['variable_names']:
+#             unbalanced = remove_variable(unbalanced, feat)
 
 # extract the balanced data
 X, Y = data['X'], data['Y']
@@ -106,21 +107,69 @@ proc_results['clf'] = proc_results['coefficients'].apply(get_classifier_from_coe
 disc_results['clf'] = disc_results['coefficients'].apply(get_classifier_from_coefficients)
 
 # get the baseline classifier
+# --they are essentially using the actual baseline here too, 
+# but using the processed version to fetch the train_eror!
 assert proc_results.query("model_type == 'baseline'").shape[0] == 1
 baseline = proc_results.query("model_type == 'baseline'").iloc[0]
 baseline_clf = baseline['clf']
 baseline_train_error = baseline['train_error']
 
+# --but then here, they are reusing the flip mip results as well?
 proc_metrics = pd.DataFrame.from_records(proc_results['clf'].apply(get_metrics, X=X, Y=Y, X_test=X_test, Y_test=Y_test, metrics=["train_error", "test_error"]))
 proc_results = pd.concat([proc_results, proc_metrics], axis=1)
+
+# print("Initial disc results")
+# print(disc_results.columns, "disc len --> ", len(disc_results))
+# print(disc_results)
 
 disc_metrics = pd.DataFrame.from_records(disc_results['clf'].apply(get_metrics, X=X, Y=Y, X_test=X_test, Y_test=Y_test, metrics=["train_error", "test_error"]))
 disc_results = pd.concat([disc_results, disc_metrics], axis=1)
 
-proc_level_set = proc_results.query('train_error <= %s' % (baseline_train_error + epsilon))
-disc_level_set = disc_results.query('train_error <= %s' % (baseline_train_error + epsilon))
-level_set_clfs = proc_level_set['clf'].append(disc_level_set['clf'])
+# Fixes to the original code here: find positions of 'train_error' columns
+train_error_cols = [i for i, col in enumerate(proc_results.columns) if col == 'train_error']
 
+# If there are duplicates
+if len(train_error_cols) > 1:
+    # Create a new column list
+    new_columns = list(proc_results.columns)
+    
+    # Rename each duplicate with a meaningful suffix
+    for i, pos in enumerate(train_error_cols):
+        new_columns[pos] = f'train_error_{i+1}'
+    
+    # Assign new column names
+    proc_results.columns = new_columns
+
+# print("repetitions: ", print(disc_results.columns.value_counts()))
+
+baseline_2 = proc_results.query("model_type == 'baseline'").iloc[0]
+baseline_train_error_2 = baseline_2['train_error_2']
+
+print("baseline error+eps:  ", baseline_train_error + epsilon)
+print("baseline error 2:  ", baseline_train_error_2)
+print("proc results train err 1:  ", proc_results['train_error_1'][0])
+print("proc results train err 2:  ", proc_results['train_error_2'][0])
+print("disc results train err:  ", disc_results['train_error'][0])
+
+print(proc_results.columns, "proc len --> ", len(proc_results))
+print(disc_results.columns, "disc len --> ", len(disc_results))
+# print("proc results, filtered: ", proc_results['epsilon'], proc_results['train_error_2'])
+# print("disc results, filtered: ", disc_results['epsilon'], disc_results['train_error'])
+
+# print("proc results: ", proc_results)
+# print("disc results: ", disc_results)
+
+threshold = baseline_train_error_2 + epsilon
+# threshold = 0.42
+# threshold = 0.26
+proc_level_set = proc_results.query('train_error_2 <= %s' % str(threshold))
+disc_level_set = disc_results.query('train_error <= %s' % str(threshold))
+# level_set_clfs = proc_level_set['clf']._append(disc_level_set['clf'])
+level_set_clfs = disc_level_set['clf']
+
+# print("proc_level_set: ", proc_level_set)
+# print("disc_level_set: ", disc_level_set)
+print("level_set_clfs: ", len(level_set_clfs))
 
 def get_multiplicity(baseline_clf, level_set_clfs, X):
     baseline_preds = baseline_clf.predict(X)
@@ -128,7 +177,8 @@ def get_multiplicity(baseline_clf, level_set_clfs, X):
 
     ambiguous_set = set()
     num_max_discrepancy = 0
-    for clf in level_set_clfs:
+    # following line works with epsilon set based models!
+    for i, clf in enumerate(level_set_clfs):
         preds = clf.predict(X)
         conflicts = np.not_equal(preds, baseline_preds)
         ambiguous_set.update(np.where(conflicts)[0])
@@ -144,11 +194,13 @@ def get_multiplicity(baseline_clf, level_set_clfs, X):
             "max_discrepancy": max_discrepancy,
             "num_max_discrepancy": num_max_discrepancy}
 
-    return_results = {k: np.round(v, 3) for k, v in results.items()}
-    for i, item in enumerate(return_results):
-        print(i, ":", item)
+    print("Final results: ", ambiguity, num_ambiguous, max_discrepancy, num_max_discrepancy, num_instances)
+    # return_results = {k: np.round(v, 3) for k, v in results.items()}
+    # for i, item in enumerate(return_results):
+    #     print(i, ":", item)
 
-    return return_results
+    # return return_results
+    return results
 
 print("multiplicity results for X: ")
 get_multiplicity(baseline_clf, level_set_clfs, X)
